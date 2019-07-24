@@ -2,17 +2,22 @@ extends Node
 
 const LEVEL_LENGTH = 30
 const LEVELS = ["city", "testworld"]
+const BASELIFE = 10
+
+onready var Player = get_tree().get_root().get_node("World/Node2D/Player")
 
 # this should be recognized automatically
 var ALL_LEVEL_MODULES = parse_modules() # level : [modules]
 var ALL_LEVEL_ENEMIES = parse_level_enemy_data() # level : {enemy : spawn_frequency(normalized to level)}
+var ALL_ITEMS = [] # parse items file
 var level_index = 0
 
 var frames_since_last_hit = 0
 var invincibility_frames = 15
 
 # upgrade Variables
-var baseLife = 10
+var startingLife = 10
+
 
 # this is always the starter-config
 # more values will come soon
@@ -23,15 +28,32 @@ var config = {
 	"ENEMIES" : [],
 	"ENEMY_COUNT" : "10",
 	"PLAYER_STATS": {
-		"LIFE" : str(baseLife),
+		"LIFE" : str(startingLife),
 		"SCORE" : "0",
-		"ITEMS" : [],
+		"MONEY" : "100",
+		"ITEM_IN_HAND" : "none",
+		"ITEMS" : {"none":null},
 	}
 }
 
+func _process(delta):
+	if Input.is_action_just_pressed("action_key"):
+		if config["PLAYER_STATS"]["ITEM_IN_HAND"] != "none":
+			config["PLAYER_STATS"]["ITEMS"][config["PLAYER_STATS"]["ITEM_IN_HAND"]].use_item()
 
-func add_score(var points):
-	config["PLAYER_STATS"]["SCORE"] = str(points + int(config["PLAYER_STATS"]["SCORE"]))
+func add_money(var money):
+	config["PLAYER_STATS"]["MONEY"] = str(money + int(config["PLAYER_STATS"]["MONEY"]))
+
+func add_health(var health):
+	config["PLAYER_STATS"]["LIFE"] = str(health + int(config["PLAYER_STATS"]["LIFE"]))
+	startingLife += health
+
+func add_item(var item) -> bool:
+	if item in ALL_ITEMS and not (item in config["PLAYER_STATS"]["ITEMS"]):
+		config["PLAYER_STATS"]["ITEMS"][item] = load("res://items/" + item + ".tscn").instance()
+		config["PLAYER_STATS"]["ITEM_IN_HAND"] = item
+		return true
+	return false
 
 func damage_player(var damage):
 	if invincible():
@@ -49,7 +71,7 @@ func return_to_title_screen():
 	config["ENEMIES"] = make_enemy_array()
 	config["ENEMY_COUNT"] = "10"
 	
-	config["PLAYER_STATS"]["LIFE"] = str(baseLife)
+	config["PLAYER_STATS"]["LIFE"] = str(startingLife)
 	config["PLAYER_STATS"]["SCORE"] = "0"
 	# items stay the same
 	
@@ -64,6 +86,7 @@ func increment_frames_since_last_hit():
 
 func _ready():
 	OS.set_window_resizable(false)
+	ALL_ITEMS = parse_items()
 	config["LEVEL_MODULES"] = make_level()
 	config["ENEMIES"] = make_enemy_array()
 
@@ -152,6 +175,9 @@ func next_level() -> void:
 func get_start_position() -> Vector2:
 	return Vector2(20,40)
 
+func set_Item_in_Hand(item):
+	config["PLAYER_STATS"]["ITEM_IN_HAND"] = item
+
 func parse_modules() -> Dictionary:
 	var path = "res://level/"
 	var module_dict = {}
@@ -182,6 +208,24 @@ func parse_modules() -> Dictionary:
 		print("There was a problem when trying to open the path: " + path)
 	
 	return module_dict
+
+func parse_items() -> Array:
+	var path = "res://items/"
+	var dir = Directory.new()
+	var return_array = ["none"]
+	if dir.open(path) == OK:
+		dir.list_dir_begin()
+		var filename = dir.get_next()
+		while filename != "":
+			if not dir.current_is_dir() and filename != "." and filename != ".." and filename.ends_with(".tscn"):
+				return_array.append(filename.substr(0,filename.length()-5))
+			filename = dir.get_next()
+	else:
+		print("There was a problem when trying to open the path: " + path)
+		
+	return return_array
+
+
 
 func parse_level_enemy_data() -> Dictionary:
 	# find all enemies
